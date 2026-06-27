@@ -30,20 +30,20 @@ Here are some screenshots showcasing the modern dark-themed user interface:
 
 ```mermaid
 graph TD
-    subgraph Frontend (React + Vite + Redux)
+    subgraph Frontend ["Frontend (React + Vite + Redux)"]
         UI[User Interface / TailwindCSS]
         Redux[Redux Toolkit Store]
         Router[React Router v7]
     end
 
-    subgraph Backend (Express + Node.js)
+    subgraph Backend ["Backend (Express + Node.js)"]
         Server[Express Server]
         Auth[JWT Auth Middleware]
         Pay[Razorpay SDK]
         Files[Multer PDF Storage]
     end
 
-    subgraph Database & Cloud
+    subgraph DBGroup ["Database & Cloud"]
         DB[(MongoDB / Mongoose)]
     end
 
