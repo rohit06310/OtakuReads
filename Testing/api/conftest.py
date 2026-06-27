@@ -32,27 +32,29 @@ async def admin_credentials(backend_url: str) -> dict:
     """
     Returns {email, password, token, id} for an admin account.
     Uses ADMIN_EMAIL / ADMIN_PASSWORD env vars when set (recommended).
-    Falls back to registering a new user (works only on a clean DB).
+    Falls back to trying seeded user admin@otakureads.com, and then
+    to registering a new user (works only on a clean DB).
     """
-    email    = os.environ.get("ADMIN_EMAIL")
-    password = os.environ.get("ADMIN_PASSWORD", "Admin@12345")
+    email    = os.environ.get("ADMIN_EMAIL", "admin@otakureads.com")
+    password = os.environ.get("ADMIN_PASSWORD", "admin123")
 
     async with httpx.AsyncClient(base_url=backend_url, timeout=15.0) as client:
-        if email:
-            res = await client.post("/api/auth/login", json={"email": email, "password": password})
-            assert res.status_code == 200, f"Admin login failed: {res.text}"
+        # 1. Attempt login with admin email
+        res = await client.post("/api/auth/login", json={"email": email, "password": password})
+        if res.status_code == 200:
             data = res.json()
             return {"email": email, "password": password,
                     "token": data["token"], "id": str(data["_id"])}
 
-        # Fallback: register as first user (first user = admin on fresh DB)
-        email = _unique_email("admin")
+        # 2. Fallback: register as first user (first user = admin on fresh DB)
+        fallback_email = _unique_email("admin")
+        fallback_password = "Admin@12345"
         res = await client.post("/api/auth/register", json={
-            "name": "Test Admin", "email": email, "password": password,
+            "name": "Test Admin", "email": fallback_email, "password": fallback_password,
         })
         assert res.status_code == 201, f"Admin registration failed: {res.text}"
         data = res.json()
-        return {"email": email, "password": password,
+        return {"email": fallback_email, "password": fallback_password,
                 "token": data["token"], "id": str(data["_id"])}
 
 

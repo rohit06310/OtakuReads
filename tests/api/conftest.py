@@ -34,31 +34,30 @@ async def admin_credentials(backend_url: str) -> dict:
     """
     Returns credentials for an admin account.
     Uses ADMIN_EMAIL / ADMIN_PASSWORD env vars if set (recommended for shared DBs),
-    otherwise attempts to register a fresh user (works only if DB is empty and
-    the first-registration-is-admin rule kicks in).
+    otherwise attempts to log in with seeded admin@otakureads.com, and then
+    attempts to register a fresh user (works only if DB is empty).
     """
-    email = os.environ.get("ADMIN_EMAIL")
-    password = os.environ.get("ADMIN_PASSWORD", "Admin@12345")
+    email = os.environ.get("ADMIN_EMAIL", "admin@otakureads.com")
+    password = os.environ.get("ADMIN_PASSWORD", "admin123")
 
-    if email:
-        # Login with provided admin credentials
-        async with httpx.AsyncClient(base_url=backend_url, timeout=15.0) as client:
-            res = await client.post("/api/auth/login", json={"email": email, "password": password})
-            assert res.status_code == 200, f"Admin login failed: {res.text}"
+    async with httpx.AsyncClient(base_url=backend_url, timeout=15.0) as client:
+        # 1. Attempt login with admin email
+        res = await client.post("/api/auth/login", json={"email": email, "password": password})
+        if res.status_code == 200:
             data = res.json()
             return {"email": email, "password": password, "token": data["token"], "id": str(data["_id"])}
 
-    # No env var — register a new admin (first user trick)
-    email = _unique_email("admin")
-    async with httpx.AsyncClient(base_url=backend_url, timeout=15.0) as client:
+        # 2. Fallback — register a new admin (first user trick)
+        fallback_email = _unique_email("admin")
+        fallback_password = "Admin@12345"
         res = await client.post("/api/auth/register", json={
             "name": "Test Admin",
-            "email": email,
-            "password": password,
+            "email": fallback_email,
+            "password": fallback_password,
         })
         assert res.status_code == 201, f"Admin registration failed: {res.text}"
         data = res.json()
-        return {"email": email, "password": password, "token": data["token"], "id": str(data["_id"])}
+        return {"email": fallback_email, "password": fallback_password, "token": data["token"], "id": str(data["_id"])}
 
 
 @pytest.fixture

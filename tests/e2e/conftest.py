@@ -81,8 +81,8 @@ def e2e_user_credentials() -> dict:
 def e2e_admin_credentials() -> dict:
     """Admin credentials — set ADMIN_EMAIL / ADMIN_PASSWORD env vars."""
     return {
-        "email": os.environ.get("ADMIN_EMAIL", ""),
-        "password": os.environ.get("ADMIN_PASSWORD", "Admin@12345"),
+        "email": os.environ.get("ADMIN_EMAIL", "admin@otakureads.com"),
+        "password": os.environ.get("ADMIN_PASSWORD", "admin123"),
     }
 
 
