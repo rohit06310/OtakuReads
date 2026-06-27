@@ -1,5 +1,3 @@
-
-
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
@@ -14,10 +12,12 @@ const BookCard = ({ book }) => {
   const { items: cartItems } = useSelector((state) => state.cart)
   const { items: wishlistItems } = useSelector((state) => state.wishlist)
   
-  const isInCart = cartItems.some(item => item.id === book.id)
-  const isInWishlist = wishlistItems.some(item => item.id === book.id)
+  const bookId = book._id || book.id
+  const isInCart = cartItems.some(item => (item._id || item.id) === bookId)
+  const isInWishlist = wishlistItems?.some(item => (item._id || item.id) === bookId) || false
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (e) => {
+    e.preventDefault()
     if (!isAuthenticated) {
       toast.error('Please login to add books to cart')
       return
@@ -32,16 +32,19 @@ const BookCard = ({ book }) => {
     toast.success('Book added to cart')
   }
 
-  const handleWishlistToggle = () => {
+  const handleWishlistToggle = (e) => {
+    e.preventDefault()
     if (!isAuthenticated) {
       toast.error('Please login to add books to wishlist')
       return
     }
 
     if (isInWishlist) {
-      dispatch(removeFromWishlist(book.id))
+      dispatch(removeFromWishlist(bookId))
+      toast.success('Removed from wishlist')
     } else {
       dispatch(addToWishlist(book))
+      toast.success('Added to wishlist')
     }
   }
 
@@ -49,87 +52,85 @@ const BookCard = ({ book }) => {
     return [...Array(5)].map((_, index) => (
       <Star
         key={index}
-        className={`w-4 h-4 ${
-          index < Math.floor(rating)
+        className={`w-3 h-3 ${
+          index < Math.floor(rating || 5)
             ? 'text-yellow-400 fill-current'
-            : 'text-gray-300'
+            : 'text-gray-600'
         }`}
       />
     ))
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition-shadow duration-300 group">
-      <div className="relative overflow-hidden">
-        <img
-          src={book.coverImage}
-          alt={book.title}
-          className="w-full h-64 object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 transition-all duration-300" />
-      </div>
-      
-      <div className="p-6">
-        <div className="mb-2">
-          <h3 className="text-xl font-semibold text-gray-900 mb-1 line-clamp-2">
-            {book.title}
-          </h3>
-          <p className="text-gray-600 text-sm">by {book.author}</p>
-        </div>
+    <Link to={`/books/${bookId}`} className="group block">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden hover:border-purple-500/50 hover:shadow-2xl hover:shadow-purple-500/10 transition-all duration-300 relative flex flex-col h-full">
         
-        <div className="flex items-center mb-3">
-          <div className="flex items-center mr-2">
-            {renderStars(book.rating)}
+        {/* Wishlist Button (Absolute) */}
+        <button
+          onClick={handleWishlistToggle}
+          className={`absolute top-4 right-4 z-10 p-2 rounded-full backdrop-blur-md transition-all ${
+            isInWishlist
+              ? 'bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30'
+              : 'bg-black/40 text-white/70 hover:bg-black/60 hover:text-white'
+          }`}
+          title={isInWishlist ? 'Remove from Wishlist' : 'Add to Wishlist'}
+        >
+          <Bookmark className={`w-4 h-4 ${isInWishlist ? 'fill-current' : ''}`} />
+        </button>
+
+        {/* Cover Image Container */}
+        <div className="relative overflow-hidden aspect-[3/4]">
+          <div className="absolute inset-0 bg-gradient-to-t from-gray-900 via-transparent to-transparent z-0 opacity-80" />
+          <img
+            src={book.coverImage}
+            alt={book.title}
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+          />
+          {/* Category Badge */}
+          <div className="absolute bottom-4 left-4 z-10">
+            <span className="px-2 py-1 bg-purple-600/80 backdrop-blur-sm text-white text-[10px] font-bold uppercase tracking-wider rounded">
+              {book.category}
+            </span>
           </div>
-          <span className="text-sm text-gray-600">({book.rating})</span>
         </div>
         
-        <p className="text-gray-700 text-sm mb-4 line-clamp-3">
-          {book.description}
-        </p>
-        
-        <div className="flex items-center justify-between">
-          <span className="text-2xl font-bold text-blue-600">
-            ₹{book.price}
-          </span>
-          <span className="text-sm text-gray-500">
-            {book.pages} pages
-          </span>
-        </div>
-        
-        <div className="mt-4 flex gap-2">
-          <Link
-            to={`/books/${book.id}`}
-            className="flex-1 bg-gray-100 text-gray-700 text-center py-2 px-4 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
-          >
-            View Details
-          </Link>
-          <button
-            onClick={handleAddToCart}
-            disabled={isInCart}
-            className={`flex-1 py-2 px-4 rounded-lg transition-colors text-sm font-medium flex items-center justify-center gap-2 ${
-              isInCart
-                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            <ShoppingCart className="w-4 h-4" />
-            {isInCart ? 'In Cart' : 'Add to Cart'}
-          </button>
-          <button
-            onClick={handleWishlistToggle}
-            className={`p-2 rounded-lg transition-colors ${
-              isInWishlist
-                ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
-                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-            }`}
-            title={isInWishlist ? 'Remove from Wishlist' : 'Add to Wishlist'}
-          >
-            <Bookmark className="w-5 h-5" />
-          </button>
+        {/* Content */}
+        <div className="p-5 flex flex-col flex-grow">
+          <div className="mb-auto">
+            <h3 className="text-lg font-bold text-white mb-1 line-clamp-2 group-hover:text-purple-400 transition-colors">
+              {book.title}
+            </h3>
+            <p className="text-gray-400 text-xs mb-3 font-medium">by {book.author}</p>
+            
+            <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center bg-gray-800 px-2 py-1 rounded-lg">
+                {renderStars(book.rating || 5)}
+                <span className="text-xs text-gray-300 ml-1 font-bold">{book.rating || 5.0}</span>
+              </div>
+              <span className="text-xs text-gray-500">{book.pages}p</span>
+            </div>
+          </div>
+          
+          <div className="mt-4 flex items-center justify-between pt-4 border-t border-gray-800">
+            <span className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-pink-500">
+              ₹{book.price}
+            </span>
+            
+            <button
+              onClick={handleAddToCart}
+              disabled={isInCart}
+              className={`p-2.5 rounded-xl transition-all ${
+                isInCart
+                  ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                  : 'bg-purple-600 text-white hover:bg-purple-500 hover:shadow-lg hover:shadow-purple-500/25'
+              }`}
+            >
+              <ShoppingCart className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Link>
   )
 }
 

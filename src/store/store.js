@@ -1,18 +1,20 @@
 import { configureStore } from '@reduxjs/toolkit'
-import authSlice from './authSlice'
-import bookSlice from './bookSlice'
-import cartSlice from './cartSlice'
-import orderSlice from './orderSlice'
-import wishlistSlice from './wishlistSlice'
+import authReducer from './authSlice'
+import bookReducer from './bookSlice'
+import cartReducer from './cartSlice'
+import orderReducer from './orderSlice'
+import wishlistReducer from './wishlistSlice'
+import reviewReducer from './reviewSlice'
+import couponReducer from './couponSlice'
 
-const store = configureStore({
+export const store = configureStore({
   reducer: {
-    auth: authSlice,
-    books: bookSlice,
-    cart: cartSlice,
-    orders: orderSlice,
-    wishlist: wishlistSlice,
+    auth: authReducer,
+    books: bookReducer,
+    cart: cartReducer,
+    orders: orderReducer,
+    wishlist: wishlistReducer,
+    reviews: reviewReducer,
+    coupons: couponReducer,
   },
 })
-
-export default store

@@ -1,136 +1,120 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
-import { createOrder } from '../store/orderSlice'
+import { createOrderThunk } from '../store/orderSlice'
 import { clearCart } from '../store/cartSlice'
 import { CreditCard, Shield, Lock, AlertCircle, CheckCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { initiateRazorpayPayment, verifyPaymentSignature, generateReceipt } from '../lib/razorpay'
-import { checkBackendHealth } from '../lib/api'
+import { checkBackendHealth, createRazorpayOrder, verifyPayment } from '../lib/api'
+import { loadRazorpayScript } from '../lib/razorpay'
+
 
 const Checkout = () => {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { items, total } = useSelector((state) => state.cart)
   const { user, isAuthenticated } = useSelector((state) => state.auth)
+  const { appliedCoupon } = useSelector((state) => state.coupons)
   const [isProcessing, setIsProcessing] = useState(false)
-  const [backendStatus, setBackendStatus] = useState('checking') // 'checking', 'connected', 'error'
+  const [backendStatus, setBackendStatus] = useState('checking')
+
+  const finalTotal = appliedCoupon ? total - appliedCoupon.discountValue : total
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate('/login')
-      return
-    }
-    if (items.length === 0) {
-      navigate('/cart')
-      return
-    }
+    if (!isAuthenticated) return navigate('/login')
+    if (items.length === 0) return navigate('/cart')
 
-    // Check backend connectivity
     const checkBackend = async () => {
       try {
         await checkBackendHealth()
         setBackendStatus('connected')
-        console.log('Backend is connected and ready')
       } catch (error) {
         setBackendStatus('error')
-        console.error('Backend connectivity check failed:', error)
-        toast.error('Payment service is currently unavailable. Please try again later.')
+        toast.error('Payment service is currently unavailable.')
       }
     }
-
     checkBackend()
   }, [isAuthenticated, items.length, navigate])
 
   const handlePayment = async () => {
     if (backendStatus !== 'connected') {
-      toast.error('Payment service is not available. Please try again later.')
-      return
+      return toast.error('Payment service is not available.')
     }
-
     setIsProcessing(true)
-    
+
     try {
-      const receipt = generateReceipt()
-      
-      console.log('Starting payment process with total:', total)
-      
-      await initiateRazorpayPayment({
-        amount: total,
-        currency: 'INR',
-        receipt: receipt,
-        user: user,
-        onSuccess: async (paymentData) => {
+      // 0. Load Razorpay script
+      const isScriptLoaded = await loadRazorpayScript()
+      if (!isScriptLoaded) {
+        setIsProcessing(false)
+        return toast.error('Failed to load Razorpay SDK. Please check your internet connection.')
+      }
+
+      // 1. Create Razorpay order via backend
+      const rzpOrder = await createRazorpayOrder({ amount: finalTotal })
+
+      // 2. Open Razorpay Checkout modal
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_RJLHxKNEwgqwwy',
+        amount: rzpOrder.amount,
+        currency: rzpOrder.currency,
+        name: 'OtakuReads',
+        description: 'Book Purchase',
+        order_id: rzpOrder.id,
+        handler: async (response) => {
           try {
-            console.log('Payment success callback triggered:', paymentData)
-            
-            // Verify payment signature via backend
-            const verificationResult = await verifyPaymentSignature(paymentData)
-            
-            if (verificationResult.verified) {
-              // Create order with payment details
-              const orderData = {
-                userId: user.id,
-                items: items,
-                total: total,
-                paymentMethod: 'Razorpay',
-                paymentStatus: 'completed',
-                paymentId: paymentData.razorpay_payment_id,
-                orderId: paymentData.razorpay_order_id,
-                receipt: receipt,
-                signature: paymentData.razorpay_signature,
-              }
-              
-              dispatch(createOrder(orderData))
-              dispatch(clearCart())
-              
-              toast.success('Payment successful! Order placed.')
-              navigate('/profile?tab=library')
-            } else {
-              toast.error('Payment verification failed. Please contact support.')
+            // 3. Verify payment signature
+            await verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+            })
+
+            // 4. Create actual order in database
+            const orderData = {
+              items: items.map(i => ({ book: i._id || i.id, quantity: i.quantity, price: i.price })),
+              total: finalTotal,
+              paymentMethod: 'Razorpay',
+              paymentId: response.razorpay_payment_id,
+              orderId: response.razorpay_order_id,
+              couponCode: appliedCoupon?.code
             }
-          } catch (error) {
-            console.error('Post-payment processing error:', error)
-            toast.error('Order creation failed. Please contact support.')
+
+            const res = await dispatch(createOrderThunk(orderData))
+            if (createOrderThunk.fulfilled.match(res)) {
+              dispatch(clearCart())
+              toast.success('Payment successful! Order placed.')
+              navigate('/profile')
+            } else {
+               toast.error('Failed to create order in database.')
+            }
+          } catch (err) {
+            toast.error('Payment verification failed. Please contact support.')
           } finally {
             setIsProcessing(false)
           }
         },
-        onError: (error) => {
-          console.error('Payment error:', error)
-          let errorMessage = 'Payment failed. Please try again.'
-          
-          if (error.message.includes('Backend server is not available')) {
-            errorMessage = 'Payment service is currently unavailable. Please try again later.'
-          } else if (error.message.includes('cancelled by user')) {
-            errorMessage = 'Payment was cancelled.'
-          } else if (error.message) {
-            errorMessage = error.message
-          }
-          
-          toast.error(errorMessage)
-          setIsProcessing(false)
-        }
-      })
-    } catch (error) {
-      console.error('Payment initialization error:', error)
-      let errorMessage = 'Failed to initialize payment. Please try again.'
-      
-      if (error.message.includes('Backend server is not available')) {
-        errorMessage = 'Payment service is currently unavailable. Please try again later.'
-        setBackendStatus('error')
-      } else if (error.message) {
-        errorMessage = error.message
+        prefill: {
+          name: user.name,
+          email: user.email,
+        },
+        theme: { color: '#3b82f6' }
       }
-      
-      toast.error(errorMessage)
+
+      const rzp = new window.Razorpay(options)
+      rzp.on('payment.failed', function (response) {
+        toast.error(response.error.description || 'Payment failed.')
+        setIsProcessing(false)
+      })
+      rzp.open()
+
+    } catch (error) {
+      toast.error('Failed to initialize payment.')
       setIsProcessing(false)
     }
   }
 
-  if (!isAuthenticated || items.length === 0) {
-    return null
-  }
+  if (!isAuthenticated || items.length === 0) return null
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -141,128 +125,72 @@ const Checkout = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Order Details */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
-              <div className="space-y-4">
-                {items.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                    <img
-                      src={item.coverImage}
-                      alt={item.title}
-                      className="w-16 h-20 object-cover rounded"
-                    />
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900">{item.title}</h3>
-                      <p className="text-sm text-gray-600">by {item.author}</p>
-                      <p className="text-blue-600 font-semibold">₹{item.price}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
-                      <p className="font-semibold">₹{(item.price * item.quantity).toFixed(2)}</p>
-                    </div>
+          {/* Order Summary */}
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Order Summary</h2>
+            <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2">
+              {items.map((item) => (
+                <div key={item._id || item.id} className="flex items-center gap-4 p-4 border rounded-lg">
+                  <img src={item.coverImage} alt={item.title} className="w-16 h-20 object-cover rounded" />
+                  <div className="flex-1">
+                    <h3 className="font-medium text-gray-900 line-clamp-1">{item.title}</h3>
+                    <p className="text-sm text-gray-600">by {item.author}</p>
+                    <p className="text-blue-600 font-semibold mt-1">₹{item.price}</p>
                   </div>
-                ))}
-              </div>
-              
-              <div className="border-t mt-6 pt-4">
-                <div className="flex justify-between text-lg font-bold">
-                  <span>Total:</span>
-                  <span className="text-blue-600">₹{total.toFixed(2)}</span>
+                  <div className="text-right">
+                    <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                    <p className="font-semibold text-gray-900">₹{(item.price * item.quantity).toFixed(2)}</p>
+                  </div>
                 </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 mt-6 pt-4 space-y-2">
+              <div className="flex justify-between text-gray-600">
+                <span>Subtotal:</span>
+                <span>₹{total.toFixed(2)}</span>
+              </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-green-600">
+                  <span>Discount ({appliedCoupon.code}):</span>
+                  <span>-₹{appliedCoupon.discountValue.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-xl font-bold text-gray-900 pt-2 border-t border-gray-200">
+                <span>Total:</span>
+                <span className="text-blue-600">₹{finalTotal.toFixed(2)}</span>
               </div>
             </div>
           </div>
 
           {/* Payment Section */}
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
-                <CreditCard className="w-6 h-6" />
-                Payment Details
-              </h2>
-              
-              <div className="space-y-4 mb-6">
-                <div className="p-4 border-2 border-blue-200 bg-blue-50 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-medium text-blue-900">Razorpay Payment</span>
-                    <div className="flex items-center gap-2">
-                      <Shield className="w-4 h-4 text-green-500" />
-                      <span className="text-sm text-green-600">Secure</span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-blue-700 mb-2">
-                    Pay securely with UPI, Cards, Net Banking, and Wallets
-                  </p>
-                  
-                  {/* Backend Status Indicator */}
-                  <div className="flex items-center gap-2 text-xs">
-                    {backendStatus === 'checking' && (
-                      <>
-                        <div className="w-3 h-3 border border-blue-400 border-t-transparent rounded-full animate-spin" />
-                        <span className="text-blue-600">Connecting to payment service...</span>
-                      </>
-                    )}
-                    {backendStatus === 'connected' && (
-                      <>
-                        <CheckCircle className="w-3 h-3 text-green-500" />
-                        <span className="text-green-600">Payment service ready</span>
-                      </>
-                    )}
-                    {backendStatus === 'error' && (
-                      <>
-                        <AlertCircle className="w-3 h-3 text-red-500" />
-                        <span className="text-red-600">Payment service unavailable</span>
-                      </>
-                    )}
-                  </div>
+          <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 h-fit">
+            <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+              <CreditCard className="w-6 h-6 text-blue-500" /> Payment Details
+            </h2>
+            <div className="p-4 border-2 border-blue-100 bg-blue-50 rounded-lg mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="font-medium text-blue-900">Razorpay Payment</span>
+                <div className="flex items-center gap-1 bg-green-100 px-2 py-1 rounded text-xs font-semibold text-green-700">
+                  <Shield size={12} /> Secure
                 </div>
               </div>
-
-              <div className="mb-6">
-                <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-4">
-                  <Lock className="w-4 h-4" />
-                  <span>Your payment information is secure and encrypted</span>
-                </div>
+              <p className="text-sm text-blue-700 mb-3">Pay securely with UPI, Cards, Net Banking, and Wallets.</p>
+              <div className="flex items-center gap-2 text-sm font-medium">
+                {backendStatus === 'checking' && <><span className="text-blue-600">Connecting...</span></>}
+                {backendStatus === 'connected' && <><CheckCircle size={16} className="text-green-600" /><span className="text-green-600">Service ready</span></>}
+                {backendStatus === 'error' && <><AlertCircle size={16} className="text-red-600" /><span className="text-red-600">Service unavailable</span></>}
               </div>
-
-              <button
-                onClick={handlePayment}
-                disabled={isProcessing || backendStatus !== 'connected'}
-                className={`w-full py-4 px-6 rounded-lg font-semibold text-lg transition-colors ${
-                  isProcessing || backendStatus !== 'connected'
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700'
-                } text-white flex items-center justify-center gap-2`}
-              >
-                {isProcessing ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Processing...
-                  </>
-                ) : backendStatus === 'checking' ? (
-                  <>
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Connecting...
-                  </>
-                ) : backendStatus === 'error' ? (
-                  <>
-                    <AlertCircle className="w-5 h-5" />
-                    Service Unavailable
-                  </>
-                ) : (
-                  <>
-                    <CreditCard className="w-5 h-5" />
-                    Pay ₹{total.toFixed(2)} with Razorpay
-                  </>
-                )}
-              </button>
-
-              <p className="text-xs text-gray-500 mt-4 text-center">
-                By completing your purchase, you agree to our Terms of Service and acknowledge our Privacy Policy.
-              </p>
             </div>
+
+            <div className="flex items-center justify-center gap-2 text-sm text-gray-500 mb-6 bg-gray-50 p-3 rounded-lg border border-gray-100">
+              <Lock size={16} /> Your payment info is secure and encrypted.
+            </div>
+
+            <button onClick={handlePayment} disabled={isProcessing || backendStatus !== 'connected'}
+              className="w-full py-4 rounded-lg font-semibold text-lg bg-blue-600 hover:bg-blue-700 text-white transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+              {isProcessing ? 'Processing...' : <><CreditCard size={20} /> Pay ₹{finalTotal.toFixed(2)}</>}
+            </button>
+            <p className="text-xs text-gray-500 mt-4 text-center">By completing your purchase, you agree to our Terms of Service.</p>
           </div>
         </div>
       </div>

@@ -1,3 +1,71 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Custom Scrollbar for premium dark-theme feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #030712; /* gray-950 */
+}
+::-webkit-scrollbar-thumb {
+  background: #1f2937; /* gray-800 */
+  border-radius: 9999px;
+  border: 2px solid #030712;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #374151; /* gray-700 */
+}
+
+/* Glassmorphism Cards & Panels */
+.glass {
+  background: rgba(17, 24, 39, 0.75); /* gray-900 with opacity */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-glow {
+  box-shadow: 0 0 50px -10px rgba(168, 85, 247, 0.2);
+}
+
+.glass-border-purple {
+  border: 1px solid rgba(168, 85, 247, 0.25);
+}
+
+.glass-border-pink {
+  border: 1px solid rgba(236, 72, 153, 0.25);
+}
+
+/* Micro-animations */
+.hover-glow:hover {
+  box-shadow: 0 0 25px 2px rgba(168, 85, 247, 0.3);
+  border-color: rgba(168, 85, 247, 0.5);
+  transform: translateY(-2px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Print Styles for Printable Invoices */
+@media print {
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  /* Hide everything on page during printing except the designated print area */
+  body > div:not(#invoice-print-root) {
+    display: none !important;
+  }
+  
+  #invoice-print-root {
+    display: block !important;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    background: white !important;
+    color: black !important;
+  }
+}

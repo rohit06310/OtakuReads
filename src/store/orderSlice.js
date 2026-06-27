@@ -1,42 +1,106 @@
-import { createSlice } from '@reduxjs/toolkit'
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { createOrder as apiCreateOrder, getMyOrders, getAllOrders as apiGetAllOrders, updateOrderStatus as apiUpdateOrderStatus } from '../lib/api';
+
+export const createOrderThunk = createAsyncThunk(
+  'orders/create',
+  async (orderData, { rejectWithValue }) => {
+    try {
+      const data = await apiCreateOrder(orderData);
+      return data.order;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.error || 'Failed to create order');
+    }
+  }
+);
+
+export const fetchMyOrdersThunk = createAsyncThunk(
+  'orders/fetchMine',
+  async (_, { rejectWithValue }) => {
+    try {
+      const data = await getMyOrders();
+      return data.orders;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.error || 'Failed to fetch orders');
+    }
+  }
+);
+
+export const fetchAllOrdersThunk = createAsyncThunk(
+  'orders/fetchAll',
+  async (_, { rejectWithValue }) => {
+    try {
+      const data = await apiGetAllOrders();
+      return data.orders;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.error || 'Failed to fetch all orders');
+    }
+  }
+);
+
+export const updateOrderStatusThunk = createAsyncThunk(
+  'orders/updateStatus',
+  async ({ id, status }, { rejectWithValue }) => {
+    try {
+      const data = await apiUpdateOrderStatus(id, status);
+      return data.order;
+    } catch (err) {
+      return rejectWithValue(err.response?.data?.error || 'Failed to update order status');
+    }
+  }
+);
 
 const orderSlice = createSlice({
   name: 'orders',
   initialState: {
-    orders: JSON.parse(localStorage.getItem('orders')) || [],
+    orders: [],
+    allOrders: [],
     loading: false,
     error: null,
   },
   reducers: {
-    createOrder: (state, action) => {
-      const newOrder = {
-        id: Date.now().toString(),
-        ...action.payload,
-        status: action.payload.paymentStatus === 'completed' ? 'completed' : 'pending',
-        createdAt: new Date().toISOString(),
-        paymentDetails: {
-          paymentId: action.payload.paymentId,
-          orderId: action.payload.orderId,
-          signature: action.payload.signature,
-          receipt: action.payload.receipt,
-        }
-      }
-      state.orders.push(newOrder)
-      localStorage.setItem('orders', JSON.stringify(state.orders))
-    },
-    setOrders: (state, action) => {
-      state.orders = action.payload
-    },
-    updateOrderStatus: (state, action) => {
-      const { orderId, status } = action.payload
-      const order = state.orders.find(order => order.id === orderId)
-      if (order) {
-        order.status = status
-        localStorage.setItem('orders', JSON.stringify(state.orders))
-      }
-    },
+    clearError: (state) => { state.error = null; },
   },
-})
+  extraReducers: (builder) => {
+    builder
+      .addCase(createOrderThunk.pending, (state) => { state.loading = true; })
+      .addCase(createOrderThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.orders.unshift(action.payload);
+      })
+      .addCase(createOrderThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
 
-export const { createOrder, setOrders, updateOrderStatus } = orderSlice.actions
-export default orderSlice.reducer
+    builder
+      .addCase(fetchMyOrdersThunk.pending, (state) => { state.loading = true; })
+      .addCase(fetchMyOrdersThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.orders = action.payload;
+      })
+      .addCase(fetchMyOrdersThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
+
+    builder
+      .addCase(fetchAllOrdersThunk.pending, (state) => { state.loading = true; })
+      .addCase(fetchAllOrdersThunk.fulfilled, (state, action) => {
+        state.loading = false;
+        state.allOrders = action.payload;
+      })
+      .addCase(fetchAllOrdersThunk.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
+
+    builder
+      .addCase(updateOrderStatusThunk.fulfilled, (state, action) => {
+        const idx = state.allOrders.findIndex(o => o._id === action.payload._id);
+        if (idx !== -1) state.allOrders[idx] = action.payload;
+      });
+  },
+});
+
+export const { clearError } = orderSlice.actions;
+export default orderSlice.reducer;

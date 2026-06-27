@@ -12,6 +12,7 @@
   "dependencies": {
     "@reduxjs/toolkit": "^2.8.2",
     "@supabase/supabase-js": "^2.55.0",
+    "axios": "^1.18.0",
     "lucide-react": "^0.539.0",
     "razorpay": "^2.9.6",
     "react": "^18.3.1",

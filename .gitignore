@@ -23,3 +23,25 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Python Virtual Environment and cache
+.venv/
+Testing/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.pytest_cache/*
+
+# Local env and data files
+.env.local
+backend/.env
+rzp.csv
+
+# Uploads
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# Temp/Text files
+Project_overview.txt
+testing.txt
+.txt

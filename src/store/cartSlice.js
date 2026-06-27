@@ -8,7 +8,8 @@ const cartSlice = createSlice({
   },
   reducers: {
     addToCart: (state, action) => {
-      const existingItem = state.items.find(item => item.id === action.payload.id)
+      const payloadId = action.payload._id || action.payload.id;
+      const existingItem = state.items.find(item => (item._id || item.id) === payloadId)
       if (!existingItem) {
         state.items.push({ ...action.payload, quantity: 1 })
         state.total += action.payload.price
@@ -16,7 +17,8 @@ const cartSlice = createSlice({
       }
     },
     removeFromCart: (state, action) => {
-      const index = state.items.findIndex(item => item.id === action.payload)
+      const payloadId = action.payload._id || action.payload;
+      const index = state.items.findIndex(item => (item._id || item.id) === payloadId)
       if (index !== -1) {
         state.total -= state.items[index].price * state.items[index].quantity
         state.items.splice(index, 1)
@@ -24,8 +26,9 @@ const cartSlice = createSlice({
       }
     },
     updateQuantity: (state, action) => {
-      const { id, quantity } = action.payload
-      const item = state.items.find(item => item.id === id)
+      const { id, _id, quantity } = action.payload
+      const targetId = _id || id;
+      const item = state.items.find(item => (item._id || item.id) === targetId)
       if (item) {
         state.total = state.total - (item.price * item.quantity) + (item.price * quantity)
         item.quantity = quantity

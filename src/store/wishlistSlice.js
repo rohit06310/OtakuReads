@@ -27,7 +27,8 @@ const wishlistSlice = createSlice({
   reducers: {
     addToWishlist: (state, action) => {
       const book = action.payload;
-      const existingItem = state.items.find((item) => item.id === book.id);
+      const bookId = book._id || book.id;
+      const existingItem = state.items.find((item) => (item._id || item.id) === bookId);
 
       if (!existingItem) {
         state.items.push(book);
@@ -38,8 +39,8 @@ const wishlistSlice = createSlice({
       saveWishlistToLocalStorage(state.items);
     },
     removeFromWishlist: (state, action) => {
-      const bookId = action.payload;
-      state.items = state.items.filter((item) => item.id !== bookId);
+      const bookId = action.payload._id || action.payload;
+      state.items = state.items.filter((item) => (item._id || item.id) !== bookId);
       toast.success('Book removed from wishlist!');
       saveWishlistToLocalStorage(state.items);
     },

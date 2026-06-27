@@ -1,89 +1,180 @@
-// API utility functions for backend communication
+import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:5000/api';
 
-// Generic API request function
-const apiRequest = async (endpoint, options = {}) => {
-  try {
-    const url = `${API_BASE_URL}${endpoint}`;
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    };
+// Create axios instance
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-    console.log(`Making API request to: ${url}`, config);
-    
-    const response = await fetch(url, config);
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || `HTTP error! status: ${response.status}`);
+// Request interceptor — attach JWT token to every request
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers['Authorization'] = `Bearer ${token}`;
     }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
-    return data;
-  } catch (error) {
-    console.error('API request failed:', error);
-    throw error;
+// Response interceptor — auto logout on 401
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      window.location.href = '/login?expired=true';
+    }
+    return Promise.reject(error);
   }
+);
+
+// ─── Auth ─────────────────────────────────────────────────────────────────────
+export const registerUser = async (data) => {
+  const res = await api.post('/auth/register', data);
+  return res.data;
 };
 
-// Check backend health
-export const checkBackendHealth = async () => {
-  try {
-    const data = await apiRequest('/health');
-    console.log('Backend health check:', data);
-    return data;
-  } catch (error) {
-    console.error('Backend health check failed:', error);
-    throw new Error('Backend server is not available');
-  }
+export const loginUser = async (data) => {
+  const res = await api.post('/auth/login', data);
+  return res.data;
 };
 
-// Create Razorpay order
-export const createOrder = async (orderData) => {
-  try {
-    const data = await apiRequest('/create-order', {
-      method: 'POST',
-      body: JSON.stringify(orderData),
-    });
-    return data.order;
-  } catch (error) {
-    console.error('Failed to create order:', error);
-    throw error;
-  }
+export const getProfile = async () => {
+  const res = await api.get('/auth/profile');
+  return res.data;
 };
 
-// Verify payment
+export const updateProfile = async (data) => {
+  const res = await api.put('/auth/profile', data);
+  return res.data;
+};
+
+// ─── Books ────────────────────────────────────────────────────────────────────
+export const fetchBooks = async (params = {}) => {
+  const res = await api.get('/books', { params });
+  return res.data;
+};
+
+export const fetchBookById = async (id) => {
+  const res = await api.get(`/books/${id}`);
+  return res.data;
+};
+
+export const createBook = async (data) => {
+  const res = await api.post('/books', data);
+  return res.data;
+};
+
+export const updateBook = async (id, data) => {
+  const res = await api.put(`/books/${id}`, data);
+  return res.data;
+};
+
+export const deleteBook = async (id) => {
+  const res = await api.delete(`/books/${id}`);
+  return res.data;
+};
+
+// ─── Orders ───────────────────────────────────────────────────────────────────
+export const createOrder = async (data) => {
+  const res = await api.post('/orders', data);
+  return res.data;
+};
+
+export const getMyOrders = async () => {
+  const res = await api.get('/orders');
+  return res.data;
+};
+
+export const getAllOrders = async () => {
+  const res = await api.get('/orders/all');
+  return res.data;
+};
+
+export const updateOrderStatus = async (id, status) => {
+  const res = await api.put(`/orders/${id}/status`, { status });
+  return res.data;
+};
+
+// ─── Reviews ──────────────────────────────────────────────────────────────────
+export const addReview = async (data) => {
+  const res = await api.post('/reviews', data);
+  return res.data;
+};
+
+export const getBookReviews = async (bookId) => {
+  const res = await api.get(`/reviews/book/${bookId}`);
+  return res.data;
+};
+
+export const deleteReview = async (id) => {
+  const res = await api.delete(`/reviews/${id}`);
+  return res.data;
+};
+
+// ─── Coupons ──────────────────────────────────────────────────────────────────
+export const validateCoupon = async (code, orderAmount) => {
+  const res = await api.post('/coupons/validate', { code, orderAmount });
+  return res.data;
+};
+
+export const getCoupons = async () => {
+  const res = await api.get('/coupons');
+  return res.data;
+};
+
+export const createCoupon = async (data) => {
+  const res = await api.post('/coupons', data);
+  return res.data;
+};
+
+// ─── Users (Admin) ────────────────────────────────────────────────────────────
+export const getAllUsers = async () => {
+  const res = await api.get('/users');
+  return res.data;
+};
+
+export const updateUserRole = async (id, role) => {
+  const res = await api.put(`/users/${id}/role`, { role });
+  return res.data;
+};
+
+export const banUnbanUser = async (id, status) => {
+  const res = await api.put(`/users/${id}/ban`, { status });
+  return res.data;
+};
+
+// ─── Payments (Razorpay) ──────────────────────────────────────────────────────
+export const createRazorpayOrder = async (orderData) => {
+  const res = await api.post('/create-order', orderData);
+  return res.data.order;
+};
+
 export const verifyPayment = async (paymentData) => {
-  try {
-    const data = await apiRequest('/verify-payment', {
-      method: 'POST',
-      body: JSON.stringify(paymentData),
-    });
-    return data;
-  } catch (error) {
-    console.error('Failed to verify payment:', error);
-    throw error;
-  }
+  const res = await api.post('/verify-payment', paymentData);
+  return res.data;
 };
 
-// Get payment details
-export const getPaymentDetails = async (paymentId) => {
-  try {
-    const data = await apiRequest(`/payment/${paymentId}`);
-    return data.payment;
-  } catch (error) {
-    console.error('Failed to get payment details:', error);
-    throw error;
-  }
+// ─── PDF Upload ───────────────────────────────────────────────────────────────
+export const uploadPdf = async (file) => {
+  const formData = new FormData();
+  formData.append('pdf', file);
+  const res = await api.post('/upload-pdf', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
 };
 
-export default {
-  checkBackendHealth,
-  createOrder,
-  verifyPayment,
-  getPaymentDetails,
+export const checkBackendHealth = async () => {
+  const res = await api.get('/health');
+  return res.data;
 };
+
+export default api;
